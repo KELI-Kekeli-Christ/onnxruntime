@@ -3,7 +3,7 @@
 
 #include "core/providers/cuda/cuda_common.h"
 #include "core/platform/env_var_utils.h"
-#include "contrib_ops/cuda/bert/group_query_attention_impl.hh"
+#include "contrib_ops/cuda/bert/group_query_attention_impl.h"
 #include "contrib_ops/cuda/bert/group_query_attention.h"
 #include "contrib_ops/cpu/bert/group_query_attention_helper.h"
 #include "contrib_ops/cuda/bert/cutlass_fmha/memory_efficient_attention.h"
@@ -242,6 +242,8 @@ GroupQueryAttention<T>::GroupQueryAttention(const OpKernelInfo& info)
   k_quant_type_ = StringToKVQuantizationType(info.GetAttrOrDefault<std::string>("k_quant_type", "NONE"));
   v_quant_type_ = StringToKVQuantizationType(info.GetAttrOrDefault<std::string>("v_quant_type", "NONE"));
   kv_cache_bit_width_ = static_cast<int>(info.GetAttrOrDefault<int64_t>("kv_cache_bit_width", 0));
+  ORT_ENFORCE(kv_cache_bit_width_ == 0 || kv_cache_bit_width_ == 4 || kv_cache_bit_width_ == 8,
+              "kv_cache_bit_width must be 0 (no quantization), 4 or 8.");
 
   kernel_options_ = this->GetAttentionKernelOptions();
 

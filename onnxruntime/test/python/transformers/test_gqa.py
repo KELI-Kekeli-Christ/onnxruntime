@@ -275,7 +275,6 @@ def create_gqa_node_and_io(
     is_past=False,
     output_qk: int = 0,  # CUDA does not support output_qk for GQA
 ):
-    past_kv_seqlen, present_kv_seqlen = 0, 0
     if is_past:
         if share_buffer:
             past_kv_seqlen = config.buffer_sequence_length
