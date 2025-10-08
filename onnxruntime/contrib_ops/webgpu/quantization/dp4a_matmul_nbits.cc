@@ -69,7 +69,7 @@ Status ApplyDP4AMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Tensor
                                   uint32_t nbits,
                                   onnxruntime::webgpu::ComputeContext& context,
                                   Tensor* y,
-                                  const Tensor* offsets) {
+                                  const uint32_t weigth_offset) {
   constexpr uint32_t kVec4Components = 4;
   constexpr uint32_t kVec2Components = 2;
   constexpr uint32_t kU32Components = 4;

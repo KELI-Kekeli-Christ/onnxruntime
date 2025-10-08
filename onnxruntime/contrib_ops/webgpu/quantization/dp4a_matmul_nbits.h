@@ -81,7 +81,7 @@ Status ApplyDP4AMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Tensor
                                   uint32_t nbits,
                                   onnxruntime::webgpu::ComputeContext& context,
                                   Tensor* y,
-                                  const Tensor* offsets);
+                                  const uint32_t weigth_offset);
 
 bool CanApplyDP4AMatrixMatMulNBits(onnxruntime::webgpu::ComputeContext& context,
                                    uint64_t accuracy_level,

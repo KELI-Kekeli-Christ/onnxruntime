@@ -491,7 +491,7 @@ Status ApplySubgroupMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Te
                                       int32_t config_index,
                                       onnxruntime::webgpu::ComputeContext& context,
                                       Tensor* y,
-                                      const Tensor* offsets) {
+                                      const uint32_t weigth_offset) {
   // If applicable, layout optimization of input matrix A(MxK) can be used for SubgroupMatrixLoad.
   Tensor a_prepack;
   if (context.AdapterInfo().vendor == std::string_view{"intel"}) {

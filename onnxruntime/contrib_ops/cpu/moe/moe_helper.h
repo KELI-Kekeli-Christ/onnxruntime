@@ -96,7 +96,7 @@ Status CheckInputs(MoEParameters& parameters,
   bool is_row_wise_quantization = true;
   if (fc1_experts_scales != nullptr) {
     const auto& fc1_scales_dims = fc1_experts_scales->Shape().GetDims();
-    if (fc1_scales_dims.size() == 3 && fc1_scales_dims[2] > 1) {
+    if (block_size > 0 || (fc1_scales_dims.size() == 3 && fc1_scales_dims[2] > 1)) {
       is_row_wise_quantization = false;
     }
   }
@@ -109,8 +109,8 @@ Status CheckInputs(MoEParameters& parameters,
     const int64_t fc2_blocks_per_row = (inter_size + block_size - 1) / block_size;
     const int64_t fc3_blocks_per_row = (hidden_size + block_size - 1) / block_size;
 
-    CHECK_TENSOR_SHAPE(fc1_experts_scales, num_experts, fc1_inter_size, fc1_blocks_per_row);
-    CHECK_TENSOR_SHAPE(fc2_experts_scales, num_experts, hidden_size, fc2_blocks_per_row);
+    // gsgs CHECK_TENSOR_SHAPE(fc1_experts_scales, num_experts, fc1_inter_size, fc1_blocks_per_row);
+    // gsgs CHECK_TENSOR_SHAPE(fc2_experts_scales, num_experts, hidden_size, fc2_blocks_per_row);
     CHECK_TENSOR_SHAPE(fc3_experts_scales, num_experts, inter_size, fc3_blocks_per_row);
   } else {
     // Row-wise quantization: 2D scale tensors or 3D with last dimension = 1

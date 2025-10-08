@@ -50,7 +50,7 @@ Status ApplySubgroupMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Te
                                       int32_t config_index,
                                       onnxruntime::webgpu::ComputeContext& context,
                                       Tensor* y,
-                                      const Tensor* offsets);
+                                      const uint32_t weigth_offset);
 
 bool CanApplySubgroupMatrixMatMulNBits(onnxruntime::webgpu::ComputeContext& context,
                                        uint64_t accuracy_level,

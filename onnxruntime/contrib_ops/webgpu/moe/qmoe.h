@@ -8,6 +8,7 @@
 #include "contrib_ops/webgpu/moe/moe_base.h"
 #include "contrib_ops/webgpu/moe/moe.h"
 #include "core/providers/webgpu/math/matmul.h"
+#include "numpy_io.h"
 
 namespace onnxruntime {
 namespace contrib {
@@ -48,6 +49,24 @@ class QMoE final : public MoE {
     }
     std::cout << "--\n";
   }
+
+  template <typename T>
+  void NpyTensor(const Tensor* t, char *file, ComputeContext& context) const {
+    auto t_cpu = context.CreateCPUTensor(t->DataType(), t->Shape());
+    Info().GetDataTransferManager().CopyTensor(*t, t_cpu);
+
+    std::vector<size_t> dims;
+    auto dims1 = t_cpu.Shape().GetDims();
+    for (int i=0; i<dims1.size(); i++) {
+      dims.push_back(dims1[i]);
+    }
+    auto a = numpy_io::NumpyArray<T>(dims);
+    for (int i = 0; i < t_cpu.Shape().Size(); i++) {
+      a.data[i] = static_cast<T>(t_cpu.Data<T>()[i]);
+    }
+    numpy_io::write_numpy_array(file, a);
+  }
+
 
  private:
   int64_t expert_weight_bits_;
