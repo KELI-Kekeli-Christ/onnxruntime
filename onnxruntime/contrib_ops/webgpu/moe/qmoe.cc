@@ -126,7 +126,7 @@ class QMoEFinalMixProgram final : public Program<QMoEFinalMixProgram> {
  private:
 };
 
-//#define GSDEBUG 1
+#define GSDEBUG 1
 #define DISPATCH(x, y) ((x + y - 1) / y)
 
 Status QMoE::ComputeInternal(ComputeContext& context) const {

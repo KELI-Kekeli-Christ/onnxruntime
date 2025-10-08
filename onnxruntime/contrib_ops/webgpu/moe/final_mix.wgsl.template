@@ -11,8 +11,8 @@ $MAIN {
     let token_idx = expert_tokens[workgroup_idx];
     let step = uniforms.hidden_size / workgroup_size_x;
     let wg_offset = local_idx * step;
-
-    let router_value = router_values[workgroup_idx + uniforms.expert_idx * uniforms.num_experts];
+    let router_value_offset = token_idx * uniforms.num_experts + uniforms.expert_idx;
+    let router_value = router_values[router_value_offset];
     let fc2_outputs_offset = workgroup_idx * uniforms.hidden_size + wg_offset;
     let output_offset = token_idx * uniforms.hidden_size + wg_offset;
     for (var i = 0u; i < step; i++) {
