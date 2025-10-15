@@ -21,23 +21,27 @@ using namespace onnxruntime::webgpu;
 
 class SubgroupMatrixMatMulNBitsProgram final : public Program<SubgroupMatrixMatMulNBitsProgram> {
  public:
-  SubgroupMatrixMatMulNBitsProgram(uint32_t nbits, int32_t config_index, const wgpu::StringView& vendor, bool has_zero_points) : Program{"SubgroupMatrixMatMulNBits"},
-                                                                                                                                 nbits_(nbits),
-                                                                                                                                 config_index_(config_index),
-                                                                                                                                 vendor_(vendor),
-                                                                                                                                 has_zero_points_(has_zero_points) {}
+  SubgroupMatrixMatMulNBitsProgram(uint32_t nbits, int32_t config_index,
+                                   const wgpu::StringView& vendor, bool has_zero_points, bool has_bias) : Program{"SubgroupMatrixMatMulNBits"},
+                                                                                                          nbits_(nbits),
+                                                                                                          config_index_(config_index),
+                                                                                                          vendor_(vendor),
+                                                                                                          has_zero_points_(has_zero_points),
+                                                                                                          has_bias_(has_bias) {}
   Status GenerateShaderCode(ShaderHelper& sh) const override;
   WEBGPU_PROGRAM_DEFINE_UNIFORM_VARIABLES(
       {"M", ProgramUniformVariableDataType::Uint32},
       {"N", ProgramUniformVariableDataType::Uint32},
       {"K", ProgramUniformVariableDataType::Uint32},
-      {"zero_blocks_per_col", ProgramUniformVariableDataType::Uint32});
+      {"zero_blocks_per_col", ProgramUniformVariableDataType::Uint32},
+      {"weigth_offset", ProgramUniformVariableDataType::Uint32});
 
  private:
   uint32_t nbits_;
   int32_t config_index_;
   std::string vendor_;
   bool has_zero_points_;
+  bool has_bias_;
 };
 
 Status ApplySubgroupMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales,

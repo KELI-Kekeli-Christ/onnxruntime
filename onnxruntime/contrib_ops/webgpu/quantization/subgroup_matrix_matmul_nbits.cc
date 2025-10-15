@@ -469,6 +469,9 @@ Status SubgroupMatrixMatMulNBitsProgram::GenerateShaderCode(ShaderHelper& shader
   if (has_zero_points_) {
     shader.AddInput("zero_points", ShaderUsage::UseUniform);
   }
+  if (has_bias_) {
+    shader.AddInput("bias", ShaderUsage::UseUniform);
+  }
   shader.AddOutput("output", ShaderUsage::UseUniform | ShaderUsage::UseElementTypeAlias);
 
   if (!vendor_.compare("apple")) {
@@ -526,7 +529,8 @@ Status ApplySubgroupMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Te
   constexpr uint32_t kU32Components = 4;
   TensorShape y_shape{1, M, N};
   const bool has_zero_points = zero_points != nullptr;
-  SubgroupMatrixMatMulNBitsProgram mul_program{nbits, config_index, context.AdapterInfo().vendor, has_zero_points};
+  const bool has_bias = bias != nullptr;
+  SubgroupMatrixMatMulNBitsProgram mul_program{nbits, config_index, context.AdapterInfo().vendor, has_zero_points, has_bias};
   if (context.AdapterInfo().vendor == std::string_view{"intel"}) {
     tile_size_a = 64;
     work_group_size = 256;
@@ -538,11 +542,14 @@ Status ApplySubgroupMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Te
   mul_program.AddInputs({{a, ProgramTensorMetadataDependency::TypeAndRank, 1},
                          {b, ProgramTensorMetadataDependency::TypeAndRank, static_cast<int>(nbits == 4 ? kU32Components : 2 * kU32Components)},
                          {scales, ProgramTensorMetadataDependency::TypeAndRank, 1}})
-      .AddUniformVariables({{M}, {N}, {K}, {zero_blocks_per_col}})
+      .AddUniformVariables({{M}, {N}, {K}, {zero_blocks_per_col}, {weigth_offset}})
       .AddOutput({y, ProgramTensorMetadataDependency::TypeAndRank, y_shape, 1})
       .CacheHint(nbits, has_zero_points);
   if (has_zero_points) {
     mul_program.AddInput({zero_points, ProgramTensorMetadataDependency::None, {(zero_points->Shape().Size() + 3) / 4}, 4});
+  }
+  if (bias) {
+    mul_program.AddInput({bias, ProgramTensorMetadataDependency::None});
   }
   return context.RunProgram(mul_program);
 }

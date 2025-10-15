@@ -189,7 +189,7 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
   ZeroTensorProgram zero;
   zero
       .AddOutput({output_tensor, ProgramTensorMetadataDependency::None, 4})
-      .SetDispatchGroupSize((total_output_size + WORKGROUP_SIZE - 1) /WORKGROUP_SIZE))
+      .SetDispatchGroupSize((total_output_size + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE)
       .AddUniformVariables({static_cast<uint32_t>(total_output_size)});
   ORT_RETURN_IF_ERROR(context.RunProgram(zero));
 
