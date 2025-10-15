@@ -126,8 +126,7 @@ class QMoEFinalMixProgram final : public Program<QMoEFinalMixProgram> {
  private:
 };
 
-#define GSDEBUG 1
-#define DISPATCH(x, y) ((x + y - 1) / y)
+// #define GSDEBUG 1
 
 Status QMoE::ComputeInternal(ComputeContext& context) const {
   const Tensor* hidden_state = context.Input<Tensor>(0);
@@ -185,11 +184,12 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
 
   Tensor* output_tensor = context.Output(0, input_shape);
   const int total_output_size = static_cast<int>(input_shape.Size()) / 4;
+
   // we are accumulating expert results into output_tensor, need to initialize to zero
   ZeroTensorProgram zero;
   zero
       .AddOutput({output_tensor, ProgramTensorMetadataDependency::None, 4})
-      .SetDispatchGroupSize(DISPATCH(total_output_size, WORKGROUP_SIZE))
+      .SetDispatchGroupSize((total_output_size + WORKGROUP_SIZE - 1) /WORKGROUP_SIZE))
       .AddUniformVariables({static_cast<uint32_t>(total_output_size)});
   ORT_RETURN_IF_ERROR(context.RunProgram(zero));
 
@@ -206,7 +206,6 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
     if (num_tokens > max_tokens) {
       num_tokens = max_tokens;
     }
-    TensorShape gate_idx_shape({num_experts, 4});
     TensorShape gate_value_shape({num_tokens, num_experts});  // use max_tokens ?
     TensorShape gate_hidden_shape({num_experts, num_tokens}); // use max_tokens ?
     TensorShape gate_count_shape({num_experts});
@@ -241,7 +240,7 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
 #endif
 
     Tensor gate_counts_cpu = context.CreateCPUTensor(dtype_uint32, gate_count_shape);
-    Info().GetDataTransferManager().CopyTensor(gate_counts, gate_counts_cpu);
+    ORT_RETURN_IF_ERROR(Info().GetDataTransferManager().CopyTensor(gate_counts, gate_counts_cpu));
 
     for (uint32_t expert_idx=0; expert_idx < num_experts; expert_idx++) {
 
@@ -276,10 +275,10 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
 
 #ifdef GSDEBUG
       if (expert_idx == 0) {
-        DumpTensor<MLFloat16>(&expert_hidden, "expert_hidden", context);
+        // DumpTensor<MLFloat16>(&expert_hidden, "expert_hidden", context);
+        // DumpTensor<uint32_t>(&expert_tokens, "expert_tokens", context);
         NpyTensor<MLFloat16>(&expert_hidden, "/tmp/expert_hidden.npy", context);
         NpyTensor<uint32_t>(&expert_tokens, "/tmp/expert_tokens.npy", context);
-        DumpTensor<uint32_t>(&expert_tokens, "expert_tokens", context);
       }
 #endif
 
@@ -300,7 +299,7 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
 
   #ifdef GSDEBUG
       if (expert_idx == 0) {
-        DumpTensor<MLFloat16>(&fc1_outputs, "fc1_outputs", context);
+        // DumpTensor<MLFloat16>(&fc1_outputs, "fc1_outputs", context);
         NpyTensor<MLFloat16>(&fc1_outputs, "/tmp/fc1_outputs.npy", context);
       }
   #endif
@@ -327,7 +326,7 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
       }
   #ifdef GSDEBUG
       if (expert_idx == 0) {
-        DumpTensor<MLFloat16>(&fc1_activated, "fc1_activated", context);
+        // DumpTensor<MLFloat16>(&fc1_activated, "fc1_activated", context);
         NpyTensor<MLFloat16>(&fc1_activated, "/tmp/fc1_activated.npy", context);
       }
   #endif
@@ -341,7 +340,7 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
       ORT_RETURN_IF_ERROR(status);
 #ifdef GSDEBUG
       if (expert_idx == 0) {
-        DumpTensor<MLFloat16>(&fc2_outputs, "fc2_outputs", context);
+        // DumpTensor<MLFloat16>(&fc2_outputs, "fc2_outputs", context);
         NpyTensor<MLFloat16>(&fc2_outputs, "/tmp/fc2_outputs.npy", context);
       }
 #endif
@@ -364,8 +363,8 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
       ORT_RETURN_IF_ERROR(context.RunProgram(final_mix));
 
 #ifdef GSDEBUG
-    NpyTensor<MLFloat16>(output_tensor, "/tmp/output.npy", context);
     DumpTensor<MLFloat16>(output_tensor, "output_tensor", context);
+    NpyTensor<MLFloat16>(output_tensor, "/tmp/output.npy", context);
 #endif
     }
   }
@@ -387,7 +386,6 @@ ONNX_OPERATOR_KERNEL_EX(
     1,
     kWebGpuExecutionProvider,
     (*KernelDefBuilder::Create())
-        .MayInplace(0, 0)
         .TypeConstraint("T", WebGpuSupportedFloatTypes())
         .TypeConstraint("T1", QMoET1Constraint())
         .TypeConstraint("T2", WebGpuSupportedFloatTypes()),

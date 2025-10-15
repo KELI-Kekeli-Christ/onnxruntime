@@ -8,7 +8,6 @@
 #include "contrib_ops/webgpu/moe/moe_base.h"
 #include "contrib_ops/webgpu/moe/moe.h"
 #include "core/providers/webgpu/math/matmul.h"
-#include "numpy_io.h"
 
 namespace onnxruntime {
 namespace contrib {
@@ -28,44 +27,6 @@ class QMoE final : public MoE {
 
   Status ComputeInternal(ComputeContext& context) const override;
 
-  // FIXME: for debug only, will remove it later.
-  template <typename T>
-  void DumpTensor(const Tensor* t, char *txt, ComputeContext& context) const {
-    int n = 16;
-    if (t->Shape().Size() < n) {
-      n = static_cast<int>(t->Shape().Size());
-    }
-    std::cout << txt << ": " << t->Shape().ToString() << std::endl;
-    auto t_cpu = context.CreateCPUTensor(t->DataType(), t->Shape());
-    Info().GetDataTransferManager().CopyTensor(*t, t_cpu);
-    const T * t_data = t_cpu.Data<T>();
-    for (int64_t i = 0; i < n; i++) {
-      std::cout << txt << "[" << i << "] = " << static_cast<float>(t_data[i]) << std::endl;
-    }
-    std::cout << "...\n";
-    int size = static_cast<int>(t->Shape().Size());
-    for (int64_t i = size - n; i < size; i++) {
-      std::cout << txt << "[" << i << "] = " << static_cast<float>(t_data[i]) << std::endl;
-    }
-    std::cout << "--\n";
-  }
-
-  template <typename T>
-  void NpyTensor(const Tensor* t, char *file, ComputeContext& context) const {
-    auto t_cpu = context.CreateCPUTensor(t->DataType(), t->Shape());
-    Info().GetDataTransferManager().CopyTensor(*t, t_cpu);
-
-    std::vector<size_t> dims;
-    auto dims1 = t_cpu.Shape().GetDims();
-    for (int i=0; i<dims1.size(); i++) {
-      dims.push_back(dims1[i]);
-    }
-    auto a = numpy_io::NumpyArray<T>(dims);
-    for (int i = 0; i < t_cpu.Shape().Size(); i++) {
-      a.data[i] = static_cast<T>(t_cpu.Data<T>()[i]);
-    }
-    numpy_io::write_numpy_array(file, a);
-  }
 
 
  private:
