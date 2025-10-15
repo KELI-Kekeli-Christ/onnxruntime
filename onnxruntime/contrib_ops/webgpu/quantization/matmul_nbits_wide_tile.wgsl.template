@@ -197,7 +197,7 @@ $MAIN {
   #endif
   for (var m_idx = 0u; m_idx < kTileM; m_idx++) {
   #if has_bias
-    write_output(batch, row + m_idx, col + local_idx, output_element_t(results[m_idx] + bias_value));
+    write_output(batch, row + m_idx, col + local_idx, output_element_t(results[m_idx]) + bias_value);
   #else
     write_output(batch, row + m_idx, col + local_idx, output_element_t(results[m_idx]));
   #endif
