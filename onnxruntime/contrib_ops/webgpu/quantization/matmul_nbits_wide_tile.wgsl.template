@@ -86,8 +86,8 @@ fn write_output(batch : u32, row : u32, col : u32, value : output_element_t) {
 fn load_b(row : u32, block_idx : u32) -> vec4<input_b_element_t> {
   if (row < uniforms.N && block_idx < uniforms.K_of_b) {
     let b_offset = uniforms.weight_idx * uniforms.K_of_b * uniforms.N;
-    let offset = row * uniforms.K_of_b + block_idx;
-    return b.getByOffset(offset + b_offset);
+    let offset = row * uniforms.K_of_b + block_idx + b_offset;
+    return b.getByOffset(offset);
   }
   return vec4<input_b_element_t>();
 }
@@ -115,7 +115,8 @@ fn dequantize(packed_data : u32,
 #else  // nbits == 8
 fn load_b(row : u32, block_idx : u32) -> array<vec2<u32>, 4> {
   if (row < uniforms.N) {
-    let offset = 2 * block_idx;
+    let b_offset = uniforms.weight_idx * uniforms.K_of_b * uniforms.N;
+    let offset = 2 * block_idx + b_offset;
     let b_data_0 = select(input_b_value_t(),
                           b.getByOffset(row * uniforms.K_of_b + offset),
                           offset < uniforms.K_of_b);
