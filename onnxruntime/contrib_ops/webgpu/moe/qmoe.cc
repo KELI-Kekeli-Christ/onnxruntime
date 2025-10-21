@@ -28,16 +28,14 @@ class GateProgram final : public Program<GateProgram> {
     shader.AddOutput("tokencount_for_expert");
 
     return WGSL_TEMPLATE_APPLY(shader, "moe/gate.wgsl.template",
-                             WGSL_TEMPLATE_PARAMETER(is_fp16, is_fp16_),
-                             WGSL_TEMPLATE_PARAMETER(k, k_)
-                            );
+                               WGSL_TEMPLATE_PARAMETER(is_fp16, is_fp16_),
+                               WGSL_TEMPLATE_PARAMETER(k, k_));
   };
 
   WEBGPU_PROGRAM_DEFINE_UNIFORM_VARIABLES(
       {"rows", ProgramUniformVariableDataType::Uint32},
       {"cols", ProgramUniformVariableDataType::Uint32},
-      {"token_offset", ProgramUniformVariableDataType::Uint32}
-    );
+      {"token_offset", ProgramUniformVariableDataType::Uint32});
 
  private:
   int k_;
@@ -61,8 +59,7 @@ class HiddenStateGatherProgram final : public Program<HiddenStateGatherProgram> 
       {"expert_idx", ProgramUniformVariableDataType::Uint32},
       {"num_experts", ProgramUniformVariableDataType::Uint32},
       {"num_tokens", ProgramUniformVariableDataType::Uint32},
-      {"hidden_size", ProgramUniformVariableDataType::Uint32}
-    );
+      {"hidden_size", ProgramUniformVariableDataType::Uint32});
 
  private:
 };
@@ -77,8 +74,7 @@ class ZeroTensorProgram final : public Program<ZeroTensorProgram> {
   };
 
   WEBGPU_PROGRAM_DEFINE_UNIFORM_VARIABLES(
-      {"size", ProgramUniformVariableDataType::Uint32}
-    );
+      {"size", ProgramUniformVariableDataType::Uint32});
 
  private:
 };
@@ -86,7 +82,7 @@ class ZeroTensorProgram final : public Program<ZeroTensorProgram> {
 class SwigLuProgram final : public Program<SwigLuProgram> {
  public:
   SwigLuProgram() : Program<SwigLuProgram>{"SwigLu"} {
-  };
+                    };
 
   Status GenerateShaderCode(ShaderHelper& shader) const override {
     shader.AddInput("input", ShaderUsage::UseElementTypeAlias);
@@ -123,6 +119,7 @@ class QMoEFinalMixProgram final : public Program<QMoEFinalMixProgram> {
       {"hidden_size", ProgramUniformVariableDataType::Uint32},
       {"num_experts", ProgramUniformVariableDataType::Uint32},
       {"expert_idx", ProgramUniformVariableDataType::Uint32});
+
  private:
 };
 
@@ -166,7 +163,7 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
                            "FC3 gating is not yet implemented for non-SwiGLU activations on CPU.");
   }
 
-  const int max_tokens = 128; // TODO: 64 for testing, target = 256
+  const int max_tokens = 128;  // TODO: 64 for testing, target = 256
   const uint32_t num_experts = static_cast<uint32_t>(moe_params.num_experts);
   const uint32_t hidden_size = static_cast<uint32_t>(moe_params.hidden_size);
   const int64_t fc1_output_size = is_swiglu && swiglu_fusion_ > 0 ? 2 * moe_params.inter_size : moe_params.inter_size;
@@ -174,10 +171,10 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
   const auto dtype = is_fp16 ? DataTypeImpl::GetType<MLFloat16>() : DataTypeImpl::GetType<float>();
   const auto dtype_uint32 = DataTypeImpl::GetType<uint32_t>();
 
-  const int64_t K_fc1 = moe_params.hidden_size; // left_shape[left_num_dims - 1]
-  const int64_t N_fc1 = fc1_output_size;        // right_shape[right_num_dims - 1]
-  const int64_t K_fc2 = moe_params.inter_size;  // left_shape[left_num_dims - 1]
-  const int64_t N_fc2 = moe_params.inter_size;  // right_shape[right_num_dims - 1]
+  const int64_t K_fc1 = moe_params.hidden_size;  // left_shape[left_num_dims - 1]
+  const int64_t N_fc1 = fc1_output_size;         // right_shape[right_num_dims - 1]
+  const int64_t K_fc2 = moe_params.inter_size;   // left_shape[left_num_dims - 1]
+  const int64_t N_fc2 = moe_params.inter_size;   // right_shape[right_num_dims - 1]
   const int64_t accuracy_level = 4;
   const int64_t block_size = (block_size_ != 0) ? block_size_ : fc1_experts_weights->Shape()[2];
   Status status;
@@ -194,8 +191,8 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
   ORT_RETURN_IF_ERROR(context.RunProgram(zero));
 
 #ifdef GSDEBUG
-    NpyTensor<MLFloat16>(hidden_state, "/tmp/hidden_state.npy", context);
-    NpyTensor<MLFloat16>(router_logits, "/tmp/router_logits.npy", context);
+  NpyTensor<MLFloat16>(hidden_state, "/tmp/hidden_state.npy", context);
+  NpyTensor<MLFloat16>(router_logits, "/tmp/router_logits.npy", context);
 #endif
 
   for (int token_offset = 0; token_offset < moe_params.num_rows; token_offset += max_tokens) {
@@ -206,8 +203,8 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
     if (num_tokens > max_tokens) {
       num_tokens = max_tokens;
     }
-    TensorShape gate_value_shape({num_tokens, num_experts});  // use max_tokens ?
-    TensorShape gate_hidden_shape({num_experts, num_tokens}); // use max_tokens ?
+    TensorShape gate_value_shape({num_tokens, num_experts});   // use max_tokens ?
+    TensorShape gate_hidden_shape({num_experts, num_tokens});  // use max_tokens ?
     TensorShape gate_count_shape({num_experts});
 
     // router_values: [num_tokens, num_experts], per expert float we multiply final results with
@@ -227,8 +224,7 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
         .SetDispatchGroupSize(static_cast<uint32_t>(num_tokens))
         .AddUniformVariables({static_cast<uint32_t>(num_tokens),
                               num_experts,
-                              static_cast<uint32_t>(token_offset)
-                            })
+                              static_cast<uint32_t>(token_offset)})
         .CacheHint(k_, is_fp16 ? "fp16" : "fp32");
 
     ORT_RETURN_IF_ERROR(context.RunProgram(gate));
@@ -242,8 +238,7 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
     Tensor gate_counts_cpu = context.CreateCPUTensor(dtype_uint32, gate_count_shape);
     ORT_RETURN_IF_ERROR(Info().GetDataTransferManager().CopyTensor(gate_counts, gate_counts_cpu));
 
-    for (uint32_t expert_idx=0; expert_idx < num_experts; expert_idx++) {
-
+    for (uint32_t expert_idx = 0; expert_idx < num_experts; expert_idx++) {
       uint32_t used_by = *(gate_counts_cpu.Data<uint32_t>() + expert_idx);
       if (used_by <= 0) {
         continue;
@@ -261,16 +256,15 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
       Tensor expert_tokens = context.CreateGPUTensor(dtype_uint32, expert_tokens_shape);
       HiddenStateGatherProgram gather;
       gather
-        .AddInputs({{&gate_hidden, ProgramTensorMetadataDependency::Type}})
-        .AddInputs({{hidden_state, ProgramTensorMetadataDependency::Type, 1}})
-        .AddOutput({&expert_hidden, ProgramTensorMetadataDependency::None, 1})
-        .AddOutput({&expert_tokens, ProgramTensorMetadataDependency::None})
-        .SetDispatchGroupSize(used_by)
-        .AddUniformVariables({expert_idx,
-                              num_experts,
-                              static_cast<uint32_t>(num_tokens),
-                              hidden_size
-                            });
+          .AddInputs({{&gate_hidden, ProgramTensorMetadataDependency::Type}})
+          .AddInputs({{hidden_state, ProgramTensorMetadataDependency::Type, 1}})
+          .AddOutput({&expert_hidden, ProgramTensorMetadataDependency::None, 1})
+          .AddOutput({&expert_tokens, ProgramTensorMetadataDependency::None})
+          .SetDispatchGroupSize(used_by)
+          .AddUniformVariables({expert_idx,
+                                num_experts,
+                                static_cast<uint32_t>(num_tokens),
+                                hidden_size});
       ORT_RETURN_IF_ERROR(context.RunProgram(gather));
 
 #ifdef GSDEBUG
@@ -297,12 +291,12 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
                                 &fc1_outputs, expert_idx);
       ORT_RETURN_IF_ERROR(status);
 
-  #ifdef GSDEBUG
+#ifdef GSDEBUG
       if (expert_idx == 0) {
         // DumpTensor<MLFloat16>(&fc1_outputs, "fc1_outputs", context);
         NpyTensor<MLFloat16>(&fc1_outputs, "/tmp/fc1_outputs.npy", context);
       }
-  #endif
+#endif
 
       //
       // Step 4: apply swigly
@@ -313,23 +307,22 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
             .AddInputs({{&fc1_outputs, ProgramTensorMetadataDependency::Type, 2}})
             .AddOutput({&fc1_activated, ProgramTensorMetadataDependency::None})
             .SetWorkgroupSize(128)
-            .SetDispatchGroupSize(((used_by * moe_params.inter_size) + 127) / 128)
-            .AddUniformVariables({
-              static_cast<uint32_t>(used_by),
-              static_cast<uint32_t>(moe_params.inter_size),
-              activation_alpha_,
-              activation_beta_,
-              swiglu_limit_});
+            .SetDispatchGroupSize(((used_by * static_cast<uint32_t>(moe_params.inter_size)) + 127) / 128)
+            .AddUniformVariables({static_cast<uint32_t>(used_by),
+                                  static_cast<uint32_t>(moe_params.inter_size),
+                                  activation_alpha_,
+                                  activation_beta_,
+                                  swiglu_limit_});
         ORT_RETURN_IF_ERROR(context.RunProgram(swiglu));
       } else {
         ORT_THROW("only swiglu is supported for now.");
       }
-  #ifdef GSDEBUG
+#ifdef GSDEBUG
       if (expert_idx == 0) {
         // DumpTensor<MLFloat16>(&fc1_activated, "fc1_activated", context);
         NpyTensor<MLFloat16>(&fc1_activated, "/tmp/fc1_activated.npy", context);
       }
-  #endif
+#endif
 
       //
       // Step 5: multiply fc1_activated with fc2 (gate_down) of the selected experts
@@ -363,8 +356,8 @@ Status QMoE::ComputeInternal(ComputeContext& context) const {
       ORT_RETURN_IF_ERROR(context.RunProgram(final_mix));
 
 #ifdef GSDEBUG
-    DumpTensor<MLFloat16>(output_tensor, "output_tensor", context);
-    NpyTensor<MLFloat16>(output_tensor, "/tmp/output.npy", context);
+      DumpTensor<MLFloat16>(output_tensor, "output_tensor", context);
+      NpyTensor<MLFloat16>(output_tensor, "/tmp/output.npy", context);
 #endif
     }
   }

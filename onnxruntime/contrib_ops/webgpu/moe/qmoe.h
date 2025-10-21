@@ -21,13 +21,11 @@ class QMoE final : public MoE {
   QMoE(const OpKernelInfo& info) : MoE(info) {
     ORT_ENFORCE(info.GetAttr<int64_t>("expert_weight_bits", &expert_weight_bits_).IsOK());
     ORT_ENFORCE(expert_weight_bits_ == 8 || expert_weight_bits_ == 4,
-       "expert_weight_bits must be 4 or 8, but got ", expert_weight_bits_);
+                "expert_weight_bits must be 4 or 8, but got ", expert_weight_bits_);
     block_size_ = static_cast<int>(info.GetAttrOrDefault<int64_t>("block_size", 0));
   }
 
   Status ComputeInternal(ComputeContext& context) const override;
-
-
 
  private:
   int64_t expert_weight_bits_;

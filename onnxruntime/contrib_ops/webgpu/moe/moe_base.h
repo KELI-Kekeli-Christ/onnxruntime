@@ -35,7 +35,6 @@ enum class MoEParallelType {
   EPAndTP = 3,
 };
 
-
 }  // namespace webgpu
 }  // namespace contrib
 }  // namespace onnxruntime
