@@ -21,13 +21,14 @@ using namespace onnxruntime::webgpu;
 
 class SubgroupMatrixMatMulNBitsProgram final : public Program<SubgroupMatrixMatMulNBitsProgram> {
  public:
-  SubgroupMatrixMatMulNBitsProgram(uint32_t nbits, int32_t config_index,
-                                   const wgpu::StringView& vendor, bool has_zero_points, bool has_bias) : Program{"SubgroupMatrixMatMulNBits"},
-                                                                                                          nbits_(nbits),
-                                                                                                          config_index_(config_index),
-                                                                                                          vendor_(vendor),
-                                                                                                          has_zero_points_(has_zero_points),
-                                                                                                          has_bias_(has_bias) {}
+  SubgroupMatrixMatMulNBitsProgram(uint32_t nbits, int32_t config_index, const wgpu::StringView& vendor, bool has_zero_points, bool has_bias, bool has_weight_idx)
+      : Program{"SubgroupMatrixMatMulNBits"},
+        nbits_(nbits),
+        config_index_(config_index),
+        vendor_(vendor),
+        has_zero_points_(has_zero_points),
+        has_bias_(has_bias),
+        has_weight_idx_{has_weight_idx} {};
   Status GenerateShaderCode(ShaderHelper& sh) const override;
   WEBGPU_PROGRAM_DEFINE_UNIFORM_VARIABLES(
       {"M", ProgramUniformVariableDataType::Uint32},
@@ -42,6 +43,7 @@ class SubgroupMatrixMatMulNBitsProgram final : public Program<SubgroupMatrixMatM
   std::string vendor_;
   bool has_zero_points_;
   bool has_bias_;
+  bool has_weight_idx_;
 };
 
 Status ApplySubgroupMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales,
@@ -54,7 +56,7 @@ Status ApplySubgroupMatrixMatMulNBits(const Tensor* a, const Tensor* b, const Te
                                       int32_t config_index,
                                       onnxruntime::webgpu::ComputeContext& context,
                                       Tensor* y,
-                                      const uint32_t weigth_offset);
+                                      const uint32_t weight_index);
 
 bool CanApplySubgroupMatrixMatMulNBits(onnxruntime::webgpu::ComputeContext& context,
                                        uint64_t accuracy_level,

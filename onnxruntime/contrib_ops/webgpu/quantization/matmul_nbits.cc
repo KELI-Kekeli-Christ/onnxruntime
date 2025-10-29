@@ -60,6 +60,7 @@ Status MatMulNBitsWideTileProgram::GenerateShaderCode(ShaderHelper& shader) cons
 
   return WGSL_TEMPLATE_APPLY(shader, "quantization/matmul_nbits_wide_tile.wgsl.template",
                              WGSL_TEMPLATE_PARAMETER(has_bias, has_bias_),
+                             WGSL_TEMPLATE_PARAMETER(has_weight_idx, has_weight_idx_),
                              WGSL_TEMPLATE_PARAMETER(has_zero_points, has_zero_points_),
                              WGSL_TEMPLATE_PARAMETER(nbits, nbits_),
                              WGSL_TEMPLATE_PARAMETER(tile_m, tile_m_),
@@ -97,6 +98,7 @@ Status MatMulNBitsProgram::GenerateShaderCode(ShaderHelper& shader) const {
                              WGSL_TEMPLATE_PARAMETER(component_b, components_b),
                              WGSL_TEMPLATE_PARAMETER(elements_in_value_b, elements_in_value_b),
                              WGSL_TEMPLATE_PARAMETER(has_bias, has_bias_),
+                             WGSL_TEMPLATE_PARAMETER(has_weight_idx, has_weight_idx_),
                              WGSL_TEMPLATE_PARAMETER(has_zero_points, has_zero_points_),
                              WGSL_TEMPLATE_PARAMETER(n_bits, nbits_),
                              WGSL_TEMPLATE_PARAMETER(output_type_i32, false),
@@ -131,20 +133,14 @@ Status MatMulNBits::ComputeInternal(onnxruntime::webgpu::ComputeContext& context
   MatMulComputeHelper helper;
   TensorShape b_shape({N_, K_});
   ORT_RETURN_IF_ERROR(helper.Compute(a->Shape(), b_shape, false, true));
-  Tensor* y;
   auto output_shape = helper.OutputShape();
-  y = context.Output(0, output_shape);
+  Tensor* y = context.Output(0, output_shape);
   const uint32_t data_size = onnxruntime::narrow<uint32_t>(y->Shape().Size());
   if (data_size == 0) {
     return Status::OK();
   }
-#if true
-  return ApplyMatMulNBits(a, b, scales, zero_points, bias, K_, N_, block_size_, accuracy_level_, bits_, context, y, static_cast<uint32_t>(weight_index_));
-#else
-  ORT_RETURN_IF_ERROR(ApplyMatMulNBits(a, b, scales, zero_points, bias, K_, N_, block_size_, accuracy_level_, bits_, context, y, static_cast<uint32_t>(weight_index_)));
-  NpyTensor<float>(y, "/tmp/mm.npy", context);
-  return Status::OK();
-#endif
+
+  return ApplyMatMulNBits(a, b, scales, zero_points, bias, K_, N_, block_size_, accuracy_level_, bits_, context, y, 0);
 }
 
 /**
@@ -158,28 +154,25 @@ Status MatMulNBits::ComputeInternal(onnxruntime::webgpu::ComputeContext& context
  *
  * @param a              Pointer to the left-hand side (activation) tensor.
  * @param b              Pointer to the quantized weight tensor.
+ *                       b has the shape (N, k_blocks, blob_size) or (weight_batch, N, k_blocks, blob_size)
  * @param scales         Pointer to the tensor containing scaling factors for quantization.
+ *                       scales has the shape (N) or (weight_batch, N)
  * @param zero_points    Pointer to the zero-point tensor for quantization; must be of type uint8 if provided.
+ *                       weight_index > 0 is only supported when zero_points is nullptr.
  * @param bias           Pointer to the bias tensor; optional.
  * @param K_op           The K dimension of the operation (number of columns in 'a' and rows in 'b' before quantization).
  * @param N_op           The N dimension of the operation (number of columns in 'b').
  * @param block_size_op  The block size used for quantization partitioning.
  * @param accuracy_level Accuracy level influencing the choice of optimized kernel.
  * @param nbits          Number of bits used for quantization.
+ * @param weight_index   Index of the weight matrix in case of stacked weights; defaults to 0.
  * @param context        Compute context for WebGPU, providing device-specific information and execution facilities.
  * @param y              Pointer to the output tensor that will hold the result.
- * @param offsets        Pointer to an optional offsets tensor; may be nullptr if not used.
  *
  * @return Status indicating whether the operation was successful or if an error occurred.
  *
- * @note Use of offsets: this allows you to use stacked weights, input and outputs. If provided, offset is a
- *       on device tensor of shape [k, 4]. It contains k entries of vec4<uint32>. Entry.x is the offset of input,
- *       entry.y is the offset of weights and entry.z is the offset of output.
- *       For example: you want to multiply the same input a with 2 different weights (that are stacked) you'd pass
- *        [vec4<uint32>(0, 0, 0), vec4<uint32>(0, 1, 1)] and the output will contain 2 stacked results.
- *
  * @note Special optimizations are considered:
- *       - Subgroup matrix multiplication for eligible Apple/Intel GPUs without offsets or bias.
+ *       - Subgroup matrix multiplication for eligible Apple/Intel GPUs.
  *       - DP4A-based multiplication on FP32-only GPUs for specific dimensions and conditions.
  *       - A wide tile program is used when block size, component count, and other criteria are met.
  *       - Otherwise, a default matmul program is used.
@@ -192,12 +185,13 @@ Status ApplyMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales, 
                         int64_t nbits,
                         onnxruntime::webgpu::ComputeContext& context,
                         Tensor* y,
-                        const uint32_t weigth_offset) {
+                        const uint32_t weight_index) {
   TensorShape b_shape({N_op, K_op});
   MatMulComputeHelper helper;
   ORT_RETURN_IF_ERROR(helper.Compute(a->Shape(), b_shape, false, true));
 
   const bool has_bias = bias != nullptr;
+  const bool has_weight_idx = weight_index > 0;
   const bool has_zero_points = zero_points != nullptr;
   if (has_zero_points) {
     ORT_ENFORCE(zero_points->DataType() == DataTypeImpl::GetType<uint8_t>(), "Currently, only uint8 is supported for zero points, but got ", zero_points->DataType());
@@ -227,16 +221,14 @@ Status ApplyMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales, 
   // apple|intel - Experimental dawn support for subgroup matrix matmul.
   if (M >= kMinMForTileOptimization && (context.AdapterInfo().vendor == std::string_view{"apple"} || context.AdapterInfo().vendor == std::string_view{"intel"}) &&
       CanApplySubgroupMatrixMatMulNBits(context, accuracy_level, block_size, batch_count, N, K, subgroup_matrix_config_index)) {
-    return ApplySubgroupMatrixMatMulNBits(a, b, scales, zero_points, bias, M, N, K, static_cast<uint32_t>(nbits), zero_blocks_per_col, subgroup_matrix_config_index, context, y, weigth_offset);
+    return ApplySubgroupMatrixMatMulNBits(a, b, scales, zero_points, bias, M, N, K, static_cast<uint32_t>(nbits), zero_blocks_per_col, subgroup_matrix_config_index, context, y, weight_index);
   }
 #endif
 
   // On FP32 only GPUs, integer math is faster than FP32 therefore always use DP4A independent of length of M.
-  // bool cond = M >= kMinMForTileOptimization || y->DataType() == DataTypeImpl::GetType<float>() || context.AdapterInfo().vendor == std::string_view{"qualcomm"};
-  //if ((M >= kMinMForTileOptimization || y->DataType() == DataTypeImpl::GetType<float>() || context.AdapterInfo().vendor == std::string_view{"qualcomm"}) &&
   if ((M >= kMinMForTileOptimization || y->DataType() == DataTypeImpl::GetType<float>() || context.AdapterInfo().vendor == std::string_view{"qualcomm"}) &&
       CanApplyDP4AMatrixMatMulNBits(context, accuracy_level, block_size, batch_count, N, K, components_a)) {
-    return ApplyDP4AMatrixMatMulNBits(a, b, scales, zero_points, bias, M, N, K, block_size, zero_blocks_per_col, kMinMForTileOptimization, static_cast<uint32_t>(nbits), context, y, weigth_offset);
+    return ApplyDP4AMatrixMatMulNBits(a, b, scales, zero_points, bias, M, N, K, block_size, zero_blocks_per_col, kMinMForTileOptimization, static_cast<uint32_t>(nbits), context, y, weight_index);
   }
 
   // WideTileProgram
@@ -257,7 +249,7 @@ Status ApplyMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales, 
     const uint32_t num_N_tile = ceil_div(N, tile_n);
     const uint32_t num_M_tile = ceil_div(M, tile_m);
 
-    MatMulNBitsWideTileProgram program{has_zero_points, has_bias, tile_m, tile_n, static_cast<uint32_t>(nbits)};
+    MatMulNBitsWideTileProgram program{has_zero_points, has_bias, has_weight_idx, tile_m, tile_n, static_cast<uint32_t>(nbits)};
     program.SetWorkgroupSize(workgroup_size);
     program.SetDispatchGroupSize(num_N_tile, num_M_tile, batch_count);
 
@@ -280,7 +272,7 @@ Status ApplyMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales, 
                         4});
     }
     if (has_bias) {
-      program.AddInput({bias, ProgramTensorMetadataDependency::TypeAndRank});
+      program.AddInput({bias, ProgramTensorMetadataDependency::None});
     }
     program.AddOutput({y,
                        ProgramTensorMetadataDependency::TypeAndRank,
@@ -294,8 +286,8 @@ Status ApplyMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales, 
                                  {zero_blocks_per_col},
                                  {num_N_tile},
                                  {num_M_tile},
-                                 {weigth_offset}});
-    program.CacheHint(nbits, has_zero_points, has_bias);
+                                 {weight_index}});
+    program.CacheHint(nbits, has_zero_points, has_bias, has_weight_idx);
 
     return context.RunProgram(program);
   }
@@ -306,7 +298,7 @@ Status ApplyMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales, 
   uint32_t components_b_with_u32 = components_b * kU32Components;
   uint32_t num_N_tile = (N + tile_size - 1) / tile_size;
   uint32_t K_of_b = (n_blocks_per_col * blob_size) / components_b_with_u32;
-  MatMulNBitsProgram program{tile_size, static_cast<uint32_t>(nbits), has_zero_points, has_bias, single_scale_weights};
+  MatMulNBitsProgram program{tile_size, static_cast<uint32_t>(nbits), has_zero_points, has_bias, has_weight_idx, single_scale_weights};
   program.SetWorkgroupSize(workgroup_size);
   program.SetDispatchGroupSize((N + tile_size - 1) / tile_size, M, batch_count);
   program
@@ -324,13 +316,13 @@ Status ApplyMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales, 
                             {zero_blocks_per_col},
                             {num_N_tile},
                             {batch_count},
-                            {weigth_offset}})
-      .CacheHint(nbits, has_zero_points, single_scale_weights, has_bias);
+                            {weight_index}})
+      .CacheHint(nbits, has_zero_points, single_scale_weights, has_bias, has_weight_idx);
   if (has_zero_points) {
     program.AddInput({zero_points, ProgramTensorMetadataDependency::None, {(zero_points->Shape().Size() + 3) / 4}, 4});
   }
   if (has_bias) {
-    program.AddInput({bias, ProgramTensorMetadataDependency::TypeAndRank});
+    program.AddInput({bias, ProgramTensorMetadataDependency::None});
   }
   return context.RunProgram(program);
 }

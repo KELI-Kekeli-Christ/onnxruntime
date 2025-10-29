@@ -14,8 +14,8 @@ using namespace onnxruntime::webgpu;
 
 class MatMulNBitsWideTileProgram final : public Program<MatMulNBitsWideTileProgram> {
  public:
-  MatMulNBitsWideTileProgram(bool has_zero_points, bool has_bias, uint32_t tile_m, uint32_t tile_n, uint32_t nbits)
-      : Program{"MatMulNBitsWideTile"}, has_zero_points_{has_zero_points}, has_bias_{has_bias}, tile_m_(tile_m), tile_n_(tile_n), nbits_(nbits) {}
+  MatMulNBitsWideTileProgram(bool has_zero_points, bool has_bias, bool has_weight_idx, uint32_t tile_m, uint32_t tile_n, uint32_t nbits)
+      : Program{"MatMulNBitsWideTile"}, has_zero_points_{has_zero_points}, has_bias_{has_bias}, has_weight_idx_{has_weight_idx}, tile_m_(tile_m), tile_n_(tile_n), nbits_(nbits) {}
 
   Status GenerateShaderCode(ShaderHelper& sh) const override;
   WEBGPU_PROGRAM_DEFINE_UNIFORM_VARIABLES({"Batch", ProgramUniformVariableDataType::Uint32},
@@ -32,6 +32,7 @@ class MatMulNBitsWideTileProgram final : public Program<MatMulNBitsWideTileProgr
  private:
   bool has_zero_points_;
   bool has_bias_;
+  bool has_weight_idx_;
   uint32_t tile_m_;
   uint32_t tile_n_;
   uint32_t nbits_;
@@ -39,7 +40,8 @@ class MatMulNBitsWideTileProgram final : public Program<MatMulNBitsWideTileProgr
 
 class MatMulNBitsProgram final : public Program<MatMulNBitsProgram> {
  public:
-  MatMulNBitsProgram(uint32_t tile_size, uint32_t nbits, bool has_zero_points, bool has_bias, bool single_scale_weights) : Program{"MatMulNBits"}, tile_size_(tile_size), nbits_(nbits), has_zero_points_(has_zero_points), has_bias_(has_bias), single_scale_weights_(single_scale_weights) {}
+  MatMulNBitsProgram(uint32_t tile_size, uint32_t nbits, bool has_zero_points, bool has_bias, bool has_weight_idx, bool single_scale_weights)
+      : Program{"MatMulNBits"}, tile_size_(tile_size), nbits_(nbits), has_zero_points_(has_zero_points), has_bias_(has_bias), has_weight_idx_{has_weight_idx}, single_scale_weights_(single_scale_weights) {}
   Status GenerateShaderCode(ShaderHelper& sh) const override;
   WEBGPU_PROGRAM_DEFINE_UNIFORM_VARIABLES(
       {"M", ProgramUniformVariableDataType::Uint32},
@@ -59,6 +61,7 @@ class MatMulNBitsProgram final : public Program<MatMulNBitsProgram> {
   uint32_t nbits_;
   bool has_zero_points_;
   bool has_bias_;
+  bool has_weight_idx_;
   bool single_scale_weights_;
 };
 
@@ -69,7 +72,6 @@ class MatMulNBits final : public WebGpuKernel {
     N_ = info.GetAttr<int64_t>("N");
     block_size_ = info.GetAttr<int64_t>("block_size");
     bits_ = info.GetAttr<int64_t>("bits");
-    weight_index_ = info.GetAttrOrDefault<int64_t>("weight_index", 0);  // FIXME: DEBUG ONLY, REMOVE LATER
     accuracy_level_ = info.GetAttrOrDefault<int64_t>("accuracy_level", 4);
     ORT_ENFORCE(bits_ == 4 || bits_ == 8 || bits_ == 2,
                 "Only 4b/8b/2b quantization is supported for MatMulNBits op, additional bits support is planned.");
@@ -83,12 +85,11 @@ class MatMulNBits final : public WebGpuKernel {
   int64_t block_size_;
   int64_t accuracy_level_;
   int64_t bits_;
-  int64_t weight_index_;
 };
 
 Status ApplyMatMulNBits(const Tensor* a, const Tensor* b, const Tensor* scales, const Tensor* zero_points, const Tensor* bias,
                         int64_t K_op, int64_t N_op, int64_t block_size_op, int64_t accuracy_level, int64_t bits_op,
-                        onnxruntime::webgpu::ComputeContext& context, Tensor* y, const uint32_t weigth_offset = 0);
+                        onnxruntime::webgpu::ComputeContext& context, Tensor* y, const uint32_t weight_index = 0);
 
 }  // namespace webgpu
 }  // namespace contrib
